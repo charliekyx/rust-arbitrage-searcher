@@ -1,0 +1,58 @@
+[
+    {
+        "name": "WETH/USDC",
+        "v3_pool": "0xC6962004f452bE9203591991D15f6b388e09E8D0",
+        "v2_pair": "0x905dfCD5649217c42684f23958568e533C711Aa3",
+        "token0_decimals": 18,
+        "token1_decimals": 6,
+        "reverse_v3_price": false
+    },
+    {
+        "name": "WETH/USDT",
+        "v3_pool": "0x2C5fBe2b032F7AE8d2C1d33c38fa6CA0A4D1C5F1",
+        "v2_pair": "0x226Fb6F1b103D33cE420c1A6f2469A3705A72761",
+        "token0_decimals": 18,
+        "token1_decimals": 6,
+        "reverse_v3_price": false
+    },
+    {
+        "name": "WBTC/WETH",
+        "v3_pool": "0x2f5e87c9312fa29aed5c179e456625d79015299c",
+        "v2_pair": "0x515e252b2b5c22b4b2b6Df66c2eBeeA871AA4d69",
+        "token0_decimals": 8,
+        "token1_decimals": 18,
+        "reverse_v3_price": false
+    },
+    {
+        "name": "USDC/USDT",
+        "v3_pool": "0x6d0c2E49164e1C179708A317050bA9e2743d0E6E",
+        "v2_pair": "0xf3d0CE4cf4E1E1bA7D06d52CC3e248152D271dA5",
+        "token0_decimals": 6,
+        "token1_decimals": 6,
+        "reverse_v3_price": false
+    },
+    {
+        "name": "ARB/WETH",
+        "v3_pool": "0x31e5bcfb0a045d78b66f11d8fe1642720260d0ab",
+        "v2_pair": null,
+        "token0_decimals": 18,
+        "token1_decimals": 18,
+        "reverse_v3_price": true
+    },
+    {
+        "name": "GMX/WETH",
+        "v3_pool": "0x588738dF6F5a81f4d77374D6738C41A40946e56c",
+        "v2_pair": "0xc63b82b6274dbb2f4ac962ff0e2490d82a71b8ae",
+        "token0_decimals": 18,
+        "token1_decimals": 18,
+        "reverse_v3_price": false
+    },
+    {
+        "name": "LINK/WETH",
+        "v3_pool": "0x539eC1Fa48aBcBB7b109178869cD68c35dF2BEc5",
+        "v2_pair": "0xe5f15d751f5a326e0f653208f417d3d66f1f38e0",
+        "token0_decimals": 18,
+        "token1_decimals": 18,
+        "reverse_v3_price": false
+    }
+]
