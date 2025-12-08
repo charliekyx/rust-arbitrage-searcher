@@ -1,0 +1,29 @@
+name: mev-bot-prod
+
+services:
+  mev-bot:
+    build: .
+    container_name: production-mev-bot
+    restart: unless-stopped
+    
+    # Load environment variables from .env file
+    env_file:
+      - .env
+    
+    # Resources limits (Adjust based on your server specs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+    
+    # Log rotation configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network optimization: Use host network for lowest latency
+    # (Note: This works best on Linux. On Mac/Windows, remove this line)
+    network_mode: "host"
