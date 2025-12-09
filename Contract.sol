@@ -47,7 +47,6 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
         executor = _newExecutor;
     }
 
-    /// @notice Executes arb with security enhancements
     function executeArb(
         address _target,
         bytes calldata _payload,
