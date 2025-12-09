@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IWETH is IERC20 {
     function deposit() external payable;
+
     function withdraw(uint256) external;
 }
 
@@ -17,7 +18,6 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
     IWETH public immutable WETH;
     address public executor;
 
-    // Events for off-chain monitoring
     event ArbExecuted(
         address indexed target,
         uint256 amountIn,
@@ -25,7 +25,6 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
         uint256 minerBribe
     );
 
-    // Custom errors
     error InsufficientProfit(uint256 expected, uint256 actual);
     error TransferFailed();
     error NotExecutor();
@@ -58,14 +57,10 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
     ) external payable onlyExecutor nonReentrant returns (uint256 profit) {
         uint256 balanceBefore = WETH.balanceOf(address(this));
 
-        // Optimization: Only approve if allowance is insufficient
         if (WETH.allowance(address(this), _target) < _amountIn) {
-            // SafeERC20 forceApprove or standard approve with max uint
             WETH.forceApprove(_target, type(uint256).max);
         }
 
-        // Interaction: External Call
-        // Security: We trust the executor to strictly define the payload
         (bool success, bytes memory reason) = _target.call(_payload);
         if (!success) {
             assembly {
@@ -74,8 +69,7 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
         }
 
         uint256 balanceAfter = WETH.balanceOf(address(this));
-        
-        // Profit Check
+
         if (balanceAfter <= balanceBefore) {
             revert InsufficientProfit(balanceBefore, balanceAfter);
         }
@@ -85,12 +79,11 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
             revert InsufficientProfit(_minProfit, grossProfit);
         }
 
-        // Bribe Payment: Use call instead of transfer to support contract-based validators
         if (_minerBribe > 0) {
             if (address(this).balance < _minerBribe) {
                 WETH.withdraw(_minerBribe);
             }
-            
+
             (bool sent, ) = block.coinbase.call{value: _minerBribe}("");
             if (!sent) {
                 revert ETHTransferFailed();
@@ -104,10 +97,15 @@ contract BundleExecutor is Ownable, ReentrancyGuard {
 
     function withdraw(address _token) external onlyOwner {
         if (_token == address(0)) {
-            (bool sent, ) = payable(msg.sender).call{value: address(this).balance}("");
+            (bool sent, ) = payable(msg.sender).call{
+                value: address(this).balance
+            }("");
             if (!sent) revert ETHTransferFailed();
         } else {
-            IERC20(_token).safeTransfer(msg.sender, IERC20(_token).balanceOf(address(this)));
+            IERC20(_token).safeTransfer(
+                msg.sender,
+                IERC20(_token).balanceOf(address(this))
+            );
         }
     }
 }
