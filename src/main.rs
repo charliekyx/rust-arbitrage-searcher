@@ -294,9 +294,9 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
     // 3. Log Listener
     let reserves = Arc::new(DashMap::new()); // 并发哈希表（Concurrent HashMap）。
-    //tokio::spawn 里的任务需要“拿走”一个变量的所有权，如果你把 reserves 直接给它，主线程手里就没东西可用了
-    // r_clone 在后台任务里写入的数据，reserves 在主线程里立马就能读到
-    let r_clone = reserves.clone(); 
+                                             //tokio::spawn 里的任务需要“拿走”一个变量的所有权，如果你把 reserves 直接给它，主线程手里就没东西可用了
+                                             // r_clone 在后台任务里写入的数据，reserves 在主线程里立马就能读到
+    let r_clone = reserves.clone();
     let p_clone = provider.clone();
     let filter = Filter::new()
         .address(pools.iter().map(|p| p.address).collect::<Vec<_>>()) // 只关心被白名单的dex合约地址事件
@@ -309,7 +309,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
         while let Some(log) = stream.next().await {
             // 在以太坊虚拟机 (EVM) 的日志数据 (data) 中，所有数字通常都会被填充到 32 字节 (256位) 的长度
             // Sync 事件的结构: Sync 事件有两个参数：reserve0 和 reserve1, 总共64字节
-        
+
             if log.data.len() == 64 {
                 if let Ok(d) = ethers::abi::decode(
                     &[
@@ -654,4 +654,127 @@ async fn estimate_eip1559_fees(provider: &Provider<Ipc>) -> Result<(U256, U256)>
     let base = block.base_fee_per_gas.unwrap_or(U256::from(100_000_000));
     let prio = parse_units("0.1", "gwei")?.into();
     Ok((base, prio))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ethers::utils::parse_ether;
+
+    fn to_u256(n: &str) -> U256 {
+        parse_ether(n).unwrap()
+    }
+
+    #[test]
+    fn test_simulate_profit_profitable() {
+        // 借入 ETH。
+        // Pool A (第一站): 价格要高 (贵)，要在这里卖 ETH。
+        // Pool A: 100 ETH, 110,000 USDC (价格 1100)
+        let ra_in = to_u256("100"); // ETH Reserve
+        let ra_out = to_u256("110000"); // USDC Reserve
+
+        // Pool B (第二站): 价格要低 (便宜)，我们要在这里买回 ETH。
+        // Pool B: 100 ETH, 100,000 USDC (价格 1000)
+        let rb_in = to_u256("100000"); // USDC Reserve (调低，变便宜)
+        let rb_out = to_u256("100"); // ETH Reserve
+
+        // 投入 1 ETH
+        let amount_in = to_u256("1");
+
+        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
+
+        // 预期逻辑：1 ETH 在 A 换成 ~1100 USDC，去 B 换回 ~1.1 ETH，利润 ~0.1 ETH
+        println!("Profit for 1 ETH input: {:?}", profit);
+        assert!(
+            profit > I256::zero(),
+            "Profit should be positive, but got {:?}",
+            profit
+        );
+    }
+
+    #[test]
+    fn test_ternary_search_optimality() {
+        // Pool A (高价卖出): 价格 2000
+        let ra_in = to_u256("100");
+        let ra_out = to_u256("200000");
+
+        // Pool B (低价买入): 价格 1000
+        let rb_in = to_u256("100000");
+        let rb_out = to_u256("100");
+
+        // 寻找最佳投入金额
+        let (best_amt, max_profit) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
+
+        println!("Best Amount: {:?}, Max Profit: {:?}", best_amt, max_profit);
+
+        // 断言：必须找到正收益
+        assert!(best_amt > U256::zero());
+        assert!(max_profit > I256::zero());
+
+        // 验证“山顶”逻辑：
+        // 比最佳金额少投一点点，或者多投一点点，利润都应该变少
+        let one_wei = U256::one();
+        let profit_at_best = simulate_profit(best_amt, ra_in, ra_out, rb_in, rb_out);
+
+        // 如果 best_amt 很大，测试 -1 wei 和 +1 wei
+        if best_amt > one_wei {
+            let profit_at_less = simulate_profit(best_amt - one_wei, ra_in, ra_out, rb_in, rb_out);
+            assert!(
+                profit_at_best >= profit_at_less,
+                "Peak check failed: best < less"
+            );
+        }
+
+        let profit_at_more = simulate_profit(best_amt + one_wei, ra_in, ra_out, rb_in, rb_out);
+        assert!(
+            profit_at_best >= profit_at_more,
+            "Peak check failed: best < more"
+        );
+    }
+
+    #[test]
+    fn test_unprofitable_scenario() {
+        // --- 亏损场景设置 ---
+        // Pool A (卖出站): 价格很低，贱卖。
+        // 100 ETH : 100,000 USDC -> 价格 1000 USDC/ETH
+        let ra_in = to_u256("100");
+        let ra_out = to_u256("100000");
+
+        // Pool B (买回站): 价格很高，贵买。
+        // 100 ETH : 110,000 USDC -> 价格 1100 USDC/ETH
+        let rb_in = to_u256("110000");
+        let rb_out = to_u256("100");
+
+        // 1. 测试单笔计算：投入 1 ETH 会发生什么？
+        let amount_in = to_u256("1");
+        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
+
+        println!("Loss for 1 ETH input: {:?}", profit);
+
+        // 断言：利润必须是负数 (I256 < 0)
+        assert!(
+            profit < I256::zero(),
+            "Should be losing money but got positive profit!"
+        );
+
+        // 2. 测试搜索算法：在这种情况下，机器人应该建议我们投多少钱？
+        // 既然怎么投都亏，最优策略应该是“不投” (0 ETH)。
+        let (best_amt, max_profit) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
+
+        println!(
+            "Best Amount in bad market: {:?}, Profit: {:?}",
+            best_amt, max_profit
+        );
+
+        // 断言：最优投入金额应该是 0 (或者非常接近 0)，利润应该是 0 (不亏就是赚)
+        assert!(
+            max_profit <= I256::zero(),
+            "Safety Check Failed: Bot thinks it can make money!"
+        );
+        let dust_threshold = to_u256("0.000001"); // 允许 0.000001 ETH 的误差
+        assert!(
+            best_amt < dust_threshold,
+            "Bot suggested risking too much money!"
+        );
+    }
 }
