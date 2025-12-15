@@ -777,4 +777,106 @@ mod tests {
             "Bot suggested risking too much money!"
         );
     }
+
+    #[test]
+    fn test_ternary_search_convergence() {
+        let ra_in = to_u256("100");
+        let ra_out = to_u256("200000");
+        let rb_in = to_u256("100000");
+        let rb_out = to_u256("100");
+
+        // 运行两次搜索，验证结果是否一致
+        let (amt1, profit1) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
+        let (amt2, profit2) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
+
+        assert_eq!(amt1, amt2, "Search results should be deterministic");
+        assert_eq!(profit1, profit2, "Profit should be deterministic");
+
+        // 验证精度（搜索范围应该收敛到 < 0.001 ETH）
+        let precision = to_u256("0.001");
+        let profit_at_plus = simulate_profit(amt1 + precision, ra_in, ra_out, rb_in, rb_out);
+        let profit_at_minus = simulate_profit(amt1 - precision, ra_in, ra_out, rb_in, rb_out);
+
+        let tolerance = profit1.abs() / 100; // 1% 误差
+        assert!(
+            (profit1 - profit_at_plus).abs() <= tolerance,
+            "Search precision insufficient"
+        );
+        assert!(
+            (profit1 - profit_at_minus).abs() <= tolerance,
+            "Search precision insufficient"
+        );
+    }
+    #[test]
+    fn test_uniswap_fee_calculation() {
+        // 简化场景：1:1 价格，无价格冲击
+        let reserve_in = to_u256("1000000"); // 1M ETH
+        let reserve_out = to_u256("1000000"); // 1M USDC
+        let amount_in = to_u256("1"); // 1 ETH
+
+        let amount_out = get_amount_out_local(amount_in, reserve_in, reserve_out);
+
+        // 预期输出 = 1 * 0.997 = 0.997 ETH（扣除 0.3% 手续费）
+        let expected = to_u256("0.997");
+
+        println!("Amount Out: {:?}", amount_out);
+        println!("Expected: {:?}", expected);
+
+        // 允许 0.1% 的误差
+        let diff = if amount_out > expected {
+            amount_out - expected
+        } else {
+            expected - amount_out
+        };
+        assert!(diff < to_u256("0.001"), "Fee calculation error");
+    }
+
+    #[test]
+    fn test_excessive_input() {
+        let ra_in = to_u256("100");
+        let ra_out = to_u256("110000");
+        let rb_in = to_u256("100000");
+        let rb_out = to_u256("100");
+
+        // 投入 1000 ETH（远超储备量）
+        let amount_in = to_u256("1000");
+        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
+
+        // 预期：利润为负（因为价格冲击太大）
+        println!("Profit for excessive input: {:?}", profit);
+        assert!(
+            profit < I256::zero(),
+            "Should lose money due to high slippage"
+        );
+    }
+    #[test]
+    fn test_zero_input() {
+        let ra_in = to_u256("100");
+        let ra_out = to_u256("110000");
+        let rb_in = to_u256("100000");
+        let rb_out = to_u256("100");
+
+        let amount_in = U256::zero();
+        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
+
+        assert_eq!(profit, I256::zero());
+    }
+    #[test]
+    fn fuzz_test_ternary_search() {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let ra_in = U256::from(rng.gen_range(1..1_000_000));
+            let ra_out = U256::from(rng.gen_range(1..1_000_000));
+            let rb_in = U256::from(rng.gen_range(1..1_000_000));
+            let rb_out = U256::from(rng.gen_range(1..1_000_000));
+
+            let (best_amt, max_profit) =
+                ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
+
+            // 验证不会 panic
+            assert!(best_amt >= U256::zero());
+        }
+    }
 }
