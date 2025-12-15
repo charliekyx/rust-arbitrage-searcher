@@ -86,7 +86,7 @@ struct GasState {
 }
 
 struct SharedGasManager {
-    accumulated_loss: Mutex<u128>,
+    accumulated_loss: Mutex<u128>, // Arc默认是不允许修改内部数据的, 保证同一时间只有一个人能修改这个数据
     file_path: String,
 }
 
@@ -108,6 +108,9 @@ impl SharedGasManager {
         if let Ok(json) = serde_json::to_string(&state) {
             let _ = fs::write(&self.file_path, json);
         }
+        // 锁的周期绑定在 guard 这个变量的生命周期上
+        // Rust 编译器会自动调用 guard 的 drop() 方法。
+        // 在 drop() 里面，Rust 会自动执行“解锁”操作。
     }
     fn get_loss(&self) -> u128 {
         *self.accumulated_loss.lock().unwrap()
@@ -220,6 +223,7 @@ fn load_encrypted_config() -> Result<AppConfig> {
 
 async fn run_bot(config: AppConfig) -> Result<()> {
     // 1. Initialize using Config Object (NOT env vars)
+    // 多处需要这个链接，这里使用arc节省资源
     let provider = Arc::new(Provider::<Ipc>::connect_ipc(&config.ipc_path).await?);
 
     let wallet = LocalWallet::from_str(&config.private_key)?.with_chain_id(8453u64);
@@ -229,6 +233,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     let contract_addr: Address = config.contract_address.parse()?;
     let executor = FlashLoanExecutor::new(contract_addr, client.clone());
 
+    // 跨任务存活(GasManager), 防止后台任务(spawn_tracker)比main后结束生命周期
     let gas_manager = Arc::new(SharedGasManager::new("gas_state.json".to_string()));
     if gas_manager.get_loss() >= MAX_DAILY_GAS_LOSS_WEI {
         let msg = format!(
@@ -239,7 +244,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
         return Err(anyhow!(msg));
     }
 
-    // 2. Whitelist Setup
+    // 2. Whitelist Setup, [name, pair address, router address]
     let raw_whitelist = vec![
         (
             "BaseSwap",
@@ -271,7 +276,6 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     for (name, pair, router) in raw_whitelist {
         let pair_addr = Address::from_str(pair)?;
         let contract = IUniswapV2Pair::new(pair_addr, client.clone());
-        // 修复3: token0() -> token_0() (Rust 蛇形命名)
         let token0 = contract.token_0().call().await?;
         let order = if token0 == usdc {
             TokenOrder::UsdcFirst
@@ -289,23 +293,28 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     }
 
     // 3. Log Listener
-    let reserves = Arc::new(DashMap::new());
-    let r_clone = reserves.clone();
+    let reserves = Arc::new(DashMap::new()); // 并发哈希表（Concurrent HashMap）。
+    //tokio::spawn 里的任务需要“拿走”一个变量的所有权，如果你把 reserves 直接给它，主线程手里就没东西可用了
+    // r_clone 在后台任务里写入的数据，reserves 在主线程里立马就能读到
+    let r_clone = reserves.clone(); 
     let p_clone = provider.clone();
     let filter = Filter::new()
-        .address(pools.iter().map(|p| p.address).collect::<Vec<_>>())
+        .address(pools.iter().map(|p| p.address).collect::<Vec<_>>()) // 只关心被白名单的dex合约地址事件
         .topic0(H256::from_str(
             "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1",
-        )?);
+        )?); // 只关心Sync(uint112, uint112)事件， keccak256("Sync(uint112,uint112)")
 
     tokio::spawn(async move {
         let mut stream = p_clone.subscribe_logs(&filter).await.unwrap();
         while let Some(log) = stream.next().await {
+            // 在以太坊虚拟机 (EVM) 的日志数据 (data) 中，所有数字通常都会被填充到 32 字节 (256位) 的长度
+            // Sync 事件的结构: Sync 事件有两个参数：reserve0 和 reserve1, 总共64字节
+        
             if log.data.len() == 64 {
                 if let Ok(d) = ethers::abi::decode(
                     &[
-                        ethers::abi::ParamType::Uint(112),
-                        ethers::abi::ParamType::Uint(112),
+                        ethers::abi::ParamType::Uint(112), //池子中 Token0 的余额（例如 USDC 的数量）
+                        ethers::abi::ParamType::Uint(112), // 池子中 Token1 的余额（例如 weth 的数量）
                     ],
                     &log.data,
                 ) {
@@ -354,6 +363,8 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
                 if let (Some(da), Some(db)) = (reserves.get(&pa.address), reserves.get(&pb.address))
                 {
+                    // 套利策略：先用 WETH 买 USDC (Pool A)，再用 USDC 买回 WETH (Pool B)
+
                     let (ra0, ra1, bn_a) = *da;
                     let (rb0, rb1, bn_b) = *db;
                     if current_bn > bn_a + 3 || current_bn > bn_b + 3 {
@@ -365,6 +376,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     } else {
                         (ra0, ra1)
                     };
+
                     let (rb_in, rb_out) = if pb.order == TokenOrder::UsdcFirst {
                         (rb0, rb1)
                     } else {
@@ -379,14 +391,14 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                         continue;
                     }
                     let profit_u256 = U256::try_from(profit_wei).unwrap_or_default();
-                    let min_profit = parse_ether("0.002")?;
+                    let min_profit = parse_ether("0.0002")?; // todo: 动态计算赚多少
 
                     if profit_u256 > min_profit {
                         let safe_amt = opt_amt * 99 / 100;
                         let safe_profit = profit_u256 * 95 / 100;
 
                         info!(
-                            "💡 Opp: {}->{}. Profit: {}",
+                            "Opp: {}->{}. Profit: {}",
                             pa.name,
                             pb.name,
                             format_ether(safe_profit)
@@ -563,6 +575,8 @@ async fn send_email(config: &AppConfig, subject: &str, body: &str) {
 }
 
 // --- Math & Logging ---
+// 套利利润曲线是一个倒 U 型抛物线，所以必须用三分法找极值点
+
 fn ternary_search_optimal_amount(
     ra_in: U256,
     ra_out: U256,
