@@ -27,8 +27,11 @@ interface IVault {
 contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
     using SafeERC20 for IERC20;
 
-    address private constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    address private constant BALANCER_VAULT =
+        0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address private constant WETH = 0x4200000000000000000000000000000000000006;
+
+    address public executor;
 
     bytes32 private _expectedHash;
 
@@ -43,7 +46,20 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
     error UntrustedInitiator();
     error CallFailed(uint256 index, bytes reason);
 
+    error OnlyExecutorOrOwner();
+
     constructor() Ownable(msg.sender) {}
+
+    function setExecutor(address _executor) external onlyOwner {
+        executor = _executor;
+    }
+
+    modifier onlyExecutorOrOwner() {
+        if (msg.sender != executor && msg.sender != owner()) {
+            revert OnlyExecutorOrOwner();
+        }
+        _;
+    }
 
     receive() external payable {}
 
@@ -52,14 +68,16 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
         address[] calldata targets,
         bytes[] calldata payloads,
         uint256 minProfit
-    ) external onlyOwner {
+    ) external onlyExecutorOrOwner {
         _expectedHash = keccak256(abi.encode(targets, payloads, minProfit));
 
-        bytes memory userData = abi.encode(ArbParams({
-            targets: targets,
-            payloads: payloads,
-            minProfit: minProfit
-        }));
+        bytes memory userData = abi.encode(
+            ArbParams({
+                targets: targets,
+                payloads: payloads,
+                minProfit: minProfit
+            })
+        );
 
         IERC20[] memory tokens = new IERC20[](1);
         tokens[0] = IERC20(WETH);
@@ -85,9 +103,11 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
 
         ArbParams memory params = abi.decode(userData, (ArbParams));
 
-        bytes32 incomingHash = keccak256(abi.encode(params.targets, params.payloads, params.minProfit));
+        bytes32 incomingHash = keccak256(
+            abi.encode(params.targets, params.payloads, params.minProfit)
+        );
         if (incomingHash != _expectedHash) revert UntrustedInitiator();
-        
+
         delete _expectedHash;
 
         uint256 amountBorrowed = amounts[0];
@@ -97,9 +117,11 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
         uint256 balanceBefore = IERC20(WETH).balanceOf(address(this));
 
         for (uint256 i = 0; i < params.targets.length; i++) {
-            (bool success, bytes memory reason) = params.targets[i].call(params.payloads[i]);
+            (bool success, bytes memory reason) = params.targets[i].call(
+                params.payloads[i]
+            );
             if (!success) {
-                 assembly {
+                assembly {
                     revert(add(reason, 32), mload(reason))
                 }
             }
@@ -108,12 +130,16 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
         uint256 balanceAfter = IERC20(WETH).balanceOf(address(this));
 
         if (balanceAfter < balanceBefore + fee + params.minProfit) {
-             revert InsufficientProfit(balanceAfter - balanceBefore, fee + params.minProfit);
+            revert InsufficientProfit(
+                balanceAfter - balanceBefore,
+                fee + params.minProfit
+            );
         }
 
         IERC20(WETH).safeTransfer(BALANCER_VAULT, amountToRepay);
 
         uint256 profit = balanceAfter - balanceBefore - fee;
+
         if (profit > 0) {
             IERC20(WETH).safeTransfer(owner(), profit);
         }
@@ -123,7 +149,10 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
         if (token == address(0)) {
             payable(msg.sender).transfer(address(this).balance);
         } else {
-            IERC20(token).safeTransfer(msg.sender, IERC20(token).balanceOf(address(this)));
+            IERC20(token).safeTransfer(
+                msg.sender,
+                IERC20(token).balanceOf(address(this))
+            );
         }
     }
 }
