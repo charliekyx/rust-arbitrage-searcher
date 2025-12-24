@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
-// Balancer 接口
 interface IFlashLoanRecipient {
     function receiveFlashLoan(
         IERC20[] memory tokens,
@@ -32,7 +31,6 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
     address private constant WETH = 0x4200000000000000000000000000000000000006;
 
     address public executor;
-
     bytes32 private _expectedHash;
 
     struct ArbParams {
@@ -45,7 +43,6 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
     error NotBalancer();
     error UntrustedInitiator();
     error CallFailed(uint256 index, bytes reason);
-
     error OnlyExecutorOrOwner();
 
     constructor() Ownable(msg.sender) {}
@@ -60,6 +57,16 @@ contract FlashLoanExecutor is IFlashLoanRecipient, Ownable {
         }
         _;
     }
+
+    function approveToken(
+        address token,
+        address spender,
+        uint256 amount
+    ) external onlyOwner {
+        IERC20(token).approve(spender, amount);
+    }
+
+    // --------------------------------------
 
     receive() external payable {}
 
