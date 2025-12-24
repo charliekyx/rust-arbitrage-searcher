@@ -248,23 +248,23 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     let raw_whitelist = vec![
         (
             "BaseSwap",
-            "0x696b47741D53c8ec7A65FE537F7D2141F91671F6",
+            "0xab067c01C7F5734da168C699Ae9d23a4512c9FdB",
             "0x2948acbbc8795267e62a1220683a48e718b52585",
         ),
         (
+            "UniswapV2",
+            "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C",
+            "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
+        ),
+        (
             "SushiSwap",
-            "0x905dfcd5649217c42684f23958568e533c711aa3",
-            "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
+            "0x2F8818D1B0f3e3E295440c1C0cDDf40aAA21fA87",
+            "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891",
         ),
         (
             "AlienBase",
-            "0x1927a412c019488a101f3f6197b91d293222dc38",
+            "0xB16D2257643fdBB32d12b9d73faB784eB4f1Bee4",
             "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7",
-        ),
-        (
-            "SwapBased",
-            "0xc56e632b7337351658428135832a2253842c6725",
-            "0xD4a7FEbD52efda82d6f8acE24908aE0aa5b4f956",
         ),
     ];
 
@@ -409,7 +409,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     if profit_u256 > dynamic_threshold {
                         let safe_amt = opt_amt * 99 / 100;
                         let contract_min_profit = dynamic_threshold;
-                        
+
                         info!(
                             "Opp found! Profit: {} ETH, Gas Cost: {} ETH. Action: GO",
                             format_ether(profit_u256),
