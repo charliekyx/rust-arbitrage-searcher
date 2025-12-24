@@ -345,6 +345,18 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
         let current_bn = block.number.unwrap();
 
+        // ============ hearbeat 检测，后续删除 =================
+        if current_bn.as_u64() % 15 == 0 {
+            info!(
+                "Heartbeat: Alive at Block {} | Monitoring {} pools | Gas: {} gwei",
+                current_bn,
+                pools.len(),
+                // 简单的 Gas 估算展示 (Option 处理)
+                format_ether(block.base_fee_per_gas.unwrap_or_default() * 1_000_000_000) // 简易转换显示，或者直接不显示Gas也行
+            );
+        }
+        // =====================================================
+
         if gas_manager.get_loss() >= MAX_DAILY_GAS_LOSS_WEI {
             let msg = format!(
                 "Daily Gas Limit Reached ({:.4} ETH).",
