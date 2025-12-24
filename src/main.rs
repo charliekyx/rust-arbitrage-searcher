@@ -391,17 +391,29 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                         continue;
                     }
                     let profit_u256 = U256::try_from(profit_wei).unwrap_or_default();
-                    let min_profit = parse_ether("0.0002")?; // todo: 动态计算赚多少
 
-                    if profit_u256 > min_profit {
+                    // 1. 估算 Gas 成本
+                    // 闪电贷交易通常消耗 200,000 - 350,000 Gas。为了安全，我们按 350,000 估算。
+                    let estimated_gas_limit = U256::from(350_000);
+                    let (base_fee, priority_fee) = estimate_eip1559_fees(&provider).await?;
+                    let gas_price = base_fee + priority_fee;
+                    let estimated_gas_cost_wei = gas_price * estimated_gas_limit;
+
+                    // 2. 设定你的“净利润”目标 (你真正想装进口袋的钱)
+                    // 比如赚 0.00005 ETH (约 $0.15) 就愿意跑
+                    let min_net_profit = parse_ether("0.00005")?;
+
+                    // 3. 动态计算这就交易需要的“毛利润”阈值
+                    let dynamic_threshold = estimated_gas_cost_wei + min_net_profit;
+
+                    if profit_u256 > dynamic_threshold {
                         let safe_amt = opt_amt * 99 / 100;
-                        let safe_profit = profit_u256 * 95 / 100;
-
+                        let contract_min_profit = dynamic_threshold;
+                        
                         info!(
-                            "Opp: {}->{}. Profit: {}",
-                            pa.name,
-                            pb.name,
-                            format_ether(safe_profit)
+                            "Opp found! Profit: {} ETH, Gas Cost: {} ETH. Action: GO",
+                            format_ether(profit_u256),
+                            format_ether(estimated_gas_cost_wei)
                         );
 
                         // Slippage Protection
@@ -442,7 +454,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                             safe_amt,
                             vec![pa.router, pb.router],
                             vec![payload1, payload2],
-                            safe_profit,
+                            contract_min_profit,
                         );
 
                         if tx_call.call().await.is_err() {
@@ -473,7 +485,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                                     pa.name.clone(),
                                     pb.name.clone(),
                                     safe_amt,
-                                    safe_profit,
+                                    contract_min_profit,
                                 );
                             }
                             Err(e) => {
@@ -651,9 +663,15 @@ async fn estimate_eip1559_fees(provider: &Provider<Ipc>) -> Result<(U256, U256)>
         .get_block(BlockNumber::Latest)
         .await?
         .ok_or_else(|| anyhow!("No block"))?;
-    let base = block.base_fee_per_gas.unwrap_or(U256::from(100_000_000));
-    let prio = parse_units("0.1", "gwei")?.into();
-    Ok((base, prio))
+
+    // Base 链的基础费
+    let base_fee = block.base_fee_per_gas.unwrap_or(U256::from(100_000_000));
+
+    // 动态调整优先费：如果是在抢机会，给高一点，比如 0.15 - 0.5 gwei
+    // 这里简单给一个比地板价稍高的值，确保快速打包
+    let priority_fee = parse_units("0.15", "gwei")?.into();
+
+    Ok((base_fee, priority_fee))
 }
 
 #[cfg(test)]
