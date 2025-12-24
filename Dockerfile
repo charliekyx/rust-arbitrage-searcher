@@ -5,23 +5,27 @@ FROM rust:1.83-slim-bookworm as builder
 
 WORKDIR /usr/src/app
 
-# Install build dependencies (OpenSSL is required for ethers-rs)
+# Install build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 # --- Caching Trick Start ---
-# Create a dummy project to cache dependencies
+# 1. 创建空项目来缓存依赖
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 COPY Cargo.toml Cargo.lock ./
-# Build specific dependencies only
+
+# 2. 编译依赖 (release模式)
 RUN cargo build --release
-# Remove the dummy binary
-RUN rm -f target/release/deps/mev_bot*
+
+# 3. 删除假构建产物
+# 注意：Cargo 在 deps 目录里通常把横杠转为下划线，所以这里用 rust_arbitrage_searcher*
+RUN rm -f target/release/deps/rust_arbitrage_searcher*
 # --- Caching Trick End ---
 
-# Copy actual source code
+# 4. 复制真正的源码
 COPY src ./src
 
-# Build the actual application
+# 5. 编译真正的二进制文件
+# 生成的可执行文件名为 rust-arbitrage-searcher (保留横杠)
 RUN cargo build --release
 
 # ========================
@@ -32,16 +36,15 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 # Install runtime dependencies
-# ca-certificates is needed for HTTPS (Flashbots/RPC)
-# libssl3 is needed for ethers-rs
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
 
-# Copy the binary from the builder stage
-COPY --from=builder /usr/src/app/target/release/mev-bot /app/mev-bot
+# Copy the binary
+# 注意：源文件是 rust-arbitrage-searcher，我们将它重命名为 bot 方便运行
+COPY --from=builder /usr/src/app/target/release/rust-arbitrage-searcher /app/bot
 
-# Use a non-root user for security (Optional but recommended)
+# Use a non-root user
 RUN useradd -m mevuser
 USER mevuser
 
 # Run the binary
-CMD ["./mev-bot"]
+CMD ["./bot"]

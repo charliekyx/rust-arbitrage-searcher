@@ -1,29 +1,39 @@
-name: mev-bot-prod
+name: arbitrage-bot-prod
 
 services:
-  mev-bot:
+  bot:
     build: .
-    container_name: production-mev-bot
+    container_name: rust-arb-bot
     restart: unless-stopped
     
-    # Load environment variables from .env file
+    # 你的代码逻辑会读取环境变量 CONFIG_PASS 来解密配置
+    # 请确保 .env 文件里有 CONFIG_PASS=你的设定密码
     env_file:
       - .env
     
-    # Resources limits (Adjust based on your server specs)
+    # 设置日志级别
+    environment:
+      - RUST_LOG=info
+      - IPC_PATH=/app/geth_data/geth.ipc
+    
     deploy:
       resources:
         limits:
           cpus: '2.0'
           memory: 4G
     
-    # Log rotation configuration
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-    # Network optimization: Use host network for lowest latency
-    # (Note: This works best on Linux. On Mac/Windows, remove this line)
+    # 网络优化：直接使用宿主机网络堆栈，减少延迟
     network_mode: "host"
+
+    volumes:
+      - ./mev_bot.secure:/app/mev_bot.secure:ro
+      - ./data/gas_state.json:/app/gas_state.json
+      - ./data/trades.jsonl:/app/trades.jsonl
+      ## ipc 配置
+      - /home/ubuntu/node/data/geth:/app/geth_data
