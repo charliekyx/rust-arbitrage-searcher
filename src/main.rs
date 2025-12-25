@@ -338,6 +338,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     tokio::spawn(async move {
         let mut stream = p_clone.subscribe_logs(&filter).await.unwrap();
         while let Some(log) = stream.next().await {
+            info!("👂 RX Log from: {:?}", log.address);
             // 在以太坊虚拟机 (EVM) 的日志数据 (data) 中，所有数字通常都会被填充到 32 字节 (256位) 的长度
             // Sync 事件的结构: Sync 事件有两个参数：reserve0 和 reserve1, 总共64字节
 
