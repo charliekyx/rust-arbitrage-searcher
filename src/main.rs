@@ -400,9 +400,6 @@ async fn run_bot(config: AppConfig) -> Result<()> {
             }
         }
 
-        let mut check_count = 0;
-        let mut match_count = 0;
-
         // --- PART 2: Arbitrage Calculation ---
         for i in 0..pools.len() {
             for j in 0..pools.len() {
@@ -416,14 +413,12 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     continue;
                 }
 
-                match_count += 1;
+                // match_count += 1;
 
                 if let (Some(da), Some(db)) = (reserves.get(&pa.address), reserves.get(&pb.address))
                 {
                     let (ra0, ra1, bn_a) = *da;
                     let (rb0, rb1, bn_b) = *db;
-
-                    check_count += 1;
 
                     let min_liq = U256::from(100_000_000_000_000_000u128);
 
@@ -462,16 +457,6 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
                     let (opt_amt, profit_wei) =
                         ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
-
-                    if check_count <= 3 {
-                        info!(
-                            "Check #{}: [{} -> {}] Profit: {} ETH",
-                            check_count,
-                            pa.name,
-                            pb.name,
-                            format_ether(U256::try_from(profit_wei).unwrap_or_default())
-                        );
-                    }
 
                     if profit_wei <= I256::zero() {
                         continue;
