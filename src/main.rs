@@ -471,6 +471,17 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     let min_net_profit = parse_ether("0.00005")?;
                     let dynamic_threshold = estimated_gas_cost_wei + min_net_profit;
 
+                    if profit_u256 > U256::zero() && profit_u256 <= dynamic_threshold {
+                        info!(
+                            "Too poor: [{} -> {}] Profit: {} ETH < Cost+Threshold: {} ETH (Gas: {} ETH)",
+                            pa.name,
+                            pb.name,
+                            format_ether(profit_u256),
+                            format_ether(dynamic_threshold),
+                            format_ether(estimated_gas_cost_wei)
+                        );
+                    }
+
                     if profit_u256 > dynamic_threshold {
                         let safe_amt = opt_amt * 99 / 100;
                         let contract_min_profit = dynamic_threshold;
