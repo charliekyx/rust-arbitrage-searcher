@@ -437,9 +437,9 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
                     // Stale data check: Ensure logs are recent
                     // Fix: Convert current_bn (U64) to u64 for comparison
-                    if current_bn.as_u64() > bn_a + 3 || current_bn.as_u64() > bn_b + 3 {
-                        continue;
-                    }
+                    // if current_bn.as_u64() > bn_a + 3 || current_bn.as_u64() > bn_b + 3 {
+                    //     continue;
+                    // }
 
                     let (ra_in, ra_out) = if pa.order == TokenOrder::UsdcFirst {
                         (ra1, ra0)
