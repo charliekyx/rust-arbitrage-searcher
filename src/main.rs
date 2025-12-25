@@ -72,6 +72,7 @@ struct PoolConfig {
     address: Address,
     router: Address,
     order: TokenOrder,
+    token_other: Address, // [新增] 记录非 WETH 的那个代币地址
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -169,13 +170,11 @@ async fn verify_pool(
 
     let weth = Address::from_str(WETH_ADDR)?;
 
-    // Determine which token is WETH to set the correct order
-    // Note: We reuse 'UsdcFirst' to represent 'WethIsToken1' (Non-WETH First)
-    // and 'WethFirst' to represent 'WethIsToken0'
-    let order = if token0 == weth {
-        TokenOrder::WethFirst
+    // 识别 WETH 顺序，同时找出另一个代币是谁
+    let (order, token_other) = if token0 == weth {
+        (TokenOrder::WethFirst, token1) // token0 是 WETH，那 token1 就是我们要的
     } else if token1 == weth {
-        TokenOrder::UsdcFirst
+        (TokenOrder::UsdcFirst, token0) // token1 是 WETH，那 token0 就是我们要的
     } else {
         return Err(anyhow!("Pool must contain WETH"));
     };
@@ -185,9 +184,9 @@ async fn verify_pool(
         address: pair_address,
         router: router_address,
         order,
+        token_other, // [新增] 保存代币地址
     })
 }
-
 // --- Main Entry ---
 
 #[tokio::main]
@@ -404,6 +403,13 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     continue;
                 }
                 let (pa, pb) = (&pools[i], &pools[j]);
+
+                // ============ 核心修复：代币匹配检查 ============
+                // 如果池子 A 卖的是 DEGEN，池子 B 收的是 USDC，这就不能套利！
+                // 必须确保两个池子交易的是同一种“非 WETH”代币。
+                if pa.token_other != pb.token_other {
+                    continue;
+                }
 
                 if let (Some(da), Some(db)) = (reserves.get(&pa.address), reserves.get(&pb.address))
                 {
