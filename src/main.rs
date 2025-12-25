@@ -433,11 +433,11 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     // 只要任意一个池子的 WETH 余额不足 0.1，直接跳过
                     if weth_a < min_liq || weth_b < min_liq {
                         // 可选：打印一下被过滤的垃圾池，方便确认
-                        info!(
-                            // "Filtering dust pool: {} (WETH: {})",
-                            pa.name,
-                            format_ether(weth_a)
-                        );
+                        // info!(
+                        //     "Filtering dust pool: {} (WETH: {})",
+                        //     pa.name,
+                        //     format_ether(weth_a)
+                        // );
                         continue;
                     }
 
