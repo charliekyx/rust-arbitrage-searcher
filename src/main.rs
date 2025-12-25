@@ -411,6 +411,20 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
                     let (ra0, ra1, bn_a) = *da;
                     let (rb0, rb1, bn_b) = *db;
+
+                    // 垃圾池过滤：如果池子里的 WETH 少于 0.1 ETH，直接跳过
+                    // WETH 精度是 18，0.1 ETH = 10^17 Wei
+                    let min_liquidity = U256::from(100_000_000_000_000_000u128);
+
+                    // 简单的判断：只要 reserve 里较小的那个数太小，可能就是垃圾池
+                    // (更严谨的做法是判断哪一个是 WETH，然后检查 WETH 的余额)
+                    if ra0 < min_liquidity && ra1 < min_liquidity {
+                        continue;
+                    }
+                    if rb0 < min_liquidity && rb1 < min_liquidity {
+                        continue;
+                    }
+
                     if current_bn > bn_a + 3 || current_bn > bn_b + 3 {
                         continue;
                     }
@@ -455,7 +469,9 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                         let contract_min_profit = dynamic_threshold;
 
                         info!(
-                            "Opp found! Profit: {} ETH, Gas Cost: {} ETH. Action: GO",
+                            "Opp found [{} -> {}]! Profit: {} ETH, Gas Cost: {} ETH. Action: GO",
+                            pa.name, // 买入池
+                            pb.name, // 卖出池
                             format_ether(profit_u256),
                             format_ether(estimated_gas_cost_wei)
                         );
