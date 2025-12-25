@@ -1,0 +1,247 @@
+[
+    {
+        "name": "BaseSwap_USDC_WETH",
+        "pair": "0xab067c01C7F5734da168C699Ae9d23a4512c9FdB",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_BRETT_WETH",
+        "pair": "0x78b9A3E9B16391dF3A379eA0c5B9c1AEf4B55AB7",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_DEGEN_WETH",
+        "pair": "0x152375ed731bD67717Fe3A12f62a9A2a27f46400",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_TOSHI_WETH",
+        "pair": "0xCefB04d884C9414140286B01754126b61DF6b247",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_AERO_WETH",
+        "pair": "0x9CEb7088753cB9B91D26987Ea92C4674E8C0f32b",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_VIRTUAL_WETH",
+        "pair": "0x34fb40820c2D530C35eDc84eD27e13D90e40Ceb1",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_BENJI_WETH",
+        "pair": "0x414e64862f2330aaf948f31b0396E08d29e4b10f",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_Top0",
+        "pair": "0xf4B96d5162ADEE867b6361e9f1848D701c4286C7",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_Top1",
+        "pair": "0xE80B4F755417FB4baF4dbd23C029db3F62786523",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_Top2",
+        "pair": "0x81a03d61c913BdcC60519423C8841C18FfB752a8",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "BaseSwap_Top3",
+        "pair": "0x9A0b05F3cF748A114A4f8351802b3BFfE07100D4",
+        "router": "0x2948acbbc8795267e62a1220683a48e718b52585"
+    },
+    {
+        "name": "AlienBase_USDC_WETH",
+        "pair": "0xB16D2257643fdBB32d12b9d73faB784eB4f1Bee4",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_BRETT_WETH",
+        "pair": "0xDBfC587661Fa53e90569D6882F09d5069f9C9Bc9",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_DEGEN_WETH",
+        "pair": "0xF1bE2eC9411A50f2C25E00d935c2409E7fac3bE9",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_TOSHI_WETH",
+        "pair": "0x30D69e95bAA2D9f1e01749D802741c5710B5F62A",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_TYBG_WETH",
+        "pair": "0xD4d799f7265B52f80982ABF1E954f16D23CbA111",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_AERO_WETH",
+        "pair": "0xe30d87B3F5ebB8850aABC595A37A472489aA43a0",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_VIRTUAL_WETH",
+        "pair": "0xDB0692b52Ca4F11A7ff8022c91dD1094f28Fb69b",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_Top0",
+        "pair": "0xd79Ef386f26E40B5e60e4aeB324F2678F6eBbF49",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_Top1",
+        "pair": "0xe9B0A6bc01B9b4eE44C7B012EC7d5A5EEAcc40df",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "AlienBase_Top2",
+        "pair": "0xeF24722d5daE32Dc155d961561cFFbc5f347EeE7",
+        "router": "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7"
+    },
+    {
+        "name": "UniswapV2_USDC_WETH",
+        "pair": "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_BRETT_WETH",
+        "pair": "0xb34380BA6a17B022782c7FC91e319C10c168FB98",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_DEGEN_WETH",
+        "pair": "0x7C327d692B72f60b28AecEDbcC1BA784712fE7b2",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_TOSHI_WETH",
+        "pair": "0xF641ff99d18bAbd6fFa38FA5cBc09dD7DaB385C4",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_TYBG_WETH",
+        "pair": "0x17E58A09F627a6b71755AB3FD8e32763EcF2fd34",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_AERO_WETH",
+        "pair": "0x081eC5d6b68A28C9e3a73eC97E351161dBB5e8ef",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_VIRTUAL_WETH",
+        "pair": "0xE31c372a7Af875b3B5E0F3713B17ef51556da667",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_HIGHER_WETH",
+        "pair": "0xa4857d0eDF2f9c0533d0107006967917968a6AC5",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_BENJI_WETH",
+        "pair": "0x16905890A1D02b6F824387419319Bf4188B961b0",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_CHOMP_WETH",
+        "pair": "0x21E4Ce87a4b27deb4beD3672F5aF5794f6c3fAA2",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_NORMIE_WETH",
+        "pair": "0x25bF6b64382796456922d741e1dFeca5c1Bf6dA6",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top1",
+        "pair": "0x6c39acC16dEb25b496c24c21E1e5f5E192eD01C8",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top2",
+        "pair": "0x0fd6bb1C585548C973563D36c90f7d167b719B0D",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top3",
+        "pair": "0x694cc6A41B2b7DDd039c368C9B817F0aE43aa412",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top4",
+        "pair": "0xB0bB2bFD5B8e162E43F01B8E0b1E20A85818eEFB",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top5",
+        "pair": "0x2D1364079f911133EE548B19D92e3BC53cF63EdF",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top6",
+        "pair": "0xA7919F296503d3afbF9b781Ef246DA4F90ee179c",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "UniswapV2_Top7",
+        "pair": "0xb2839134B8151964f19f6f3c7D59C70ae52852F5",
+        "router": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    },
+    {
+        "name": "SushiSwap_USDC_WETH",
+        "pair": "0x2F8818D1B0f3e3E295440c1C0cDDf40aAA21fA87",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_BRETT_WETH",
+        "pair": "0x404E927b203375779a6aBD52A2049cE0ADf6609B",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_DEGEN_WETH",
+        "pair": "0x5636C6F5aDe81B63da945Ba4C9F504C7EAa9EA61",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_TOSHI_WETH",
+        "pair": "0xbFC74e1De81E81B0A807469502F6662Cc238795e",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_TYBG_WETH",
+        "pair": "0xF65BB528cED09008603509c3fDa43e1cCfdDF935",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_AERO_WETH",
+        "pair": "0xCA99c89b041C5DA128Ae2C98a326135e0ee08f14",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_NORMIE_WETH",
+        "pair": "0x98433581b5420bC67FC5fD2B5f9Dd3E7cA43140b",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_Top0",
+        "pair": "0x206a3356D7D4d2D2C9EbcD7CF489F1661a488CA1",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_Top1",
+        "pair": "0x7395f6134220c327A42AADEBC5af681f6894ecC0",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    },
+    {
+        "name": "SushiSwap_Top2",
+        "pair": "0x44eA80FB58B0F626ACE0793A985842906fA4c289",
+        "router": "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891"
+    }
+]

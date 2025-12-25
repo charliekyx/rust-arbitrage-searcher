@@ -5,23 +5,23 @@ services:
     build: .
     container_name: rust-arb-bot
     restart: unless-stopped
-    
+
     # 你的代码逻辑会读取环境变量 CONFIG_PASS 来解密配置
     # 请确保 .env 文件里有 CONFIG_PASS=你的设定密码
     env_file:
       - .env
-    
+
     # 设置日志级别
     environment:
       - RUST_LOG=info
       - IPC_PATH=/app/geth_data/geth.ipc
-    
+
     deploy:
       resources:
         limits:
           cpus: '2.0'
           memory: 4G
-    
+
     logging:
       driver: "json-file"
       options:
@@ -35,5 +35,5 @@ services:
       - ./mev_bot.secure:/app/mev_bot.secure:ro
       - ./data/gas_state.json:/app/gas_state.json
       - ./data/trades.jsonl:/app/trades.jsonl
-      ## ipc 配置
-      - /home/ubuntu/node/data/geth:/app/geth_data
+      - /home/ubuntu/node/data/geth:/app/geth_data ## ipc config
+      - ./pools.json:/app/pools.json

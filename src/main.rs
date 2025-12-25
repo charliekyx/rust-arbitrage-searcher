@@ -46,8 +46,18 @@ const SLIPPAGE_TOLERANCE_BPS: u64 = 100;
 abigen!(
     FlashLoanExecutor, r#"[function executeArb(uint256 amountToBorrow, address[] targets, bytes[] payloads, uint256 minProfit) external]"#;
     IUniswapV2Router, r#"[function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) external returns (uint[] memory amounts)]"#;
-    IUniswapV2Pair, r#"[function token0() external view returns (address)]"#
+   IUniswapV2Pair, r#"[
+        function token0() external view returns (address)
+        function token1() external view returns (address)
+    ]"#
 );
+
+#[derive(Debug, Deserialize)]
+struct JsonPoolInput {
+    name: String,
+    pair: String,
+    router: String,
+}
 
 // --- Data Structures ---
 #[derive(Clone, Debug, PartialEq)]
@@ -144,6 +154,38 @@ impl NonceManager {
         warn!("Nonce resynced to {}", on_chain);
         Ok(())
     }
+}
+
+// Helper function to verify pool and determine token order
+// This extracts the logic that was previously hardcoded inside the loop
+async fn verify_pool(
+    client: Arc<SignerMiddleware<Arc<Provider<Ipc>>, LocalWallet>>,
+    pair_address: Address,
+    router_address: Address,
+) -> Result<PoolConfig> {
+    let contract = IUniswapV2Pair::new(pair_address, client.clone());
+    let token0 = contract.token_0().call().await?;
+    let token1 = contract.token_1().call().await?;
+
+    let weth = Address::from_str(WETH_ADDR)?;
+
+    // Determine which token is WETH to set the correct order
+    // Note: We reuse 'UsdcFirst' to represent 'WethIsToken1' (Non-WETH First)
+    // and 'WethFirst' to represent 'WethIsToken0'
+    let order = if token0 == weth {
+        TokenOrder::WethFirst
+    } else if token1 == weth {
+        TokenOrder::UsdcFirst
+    } else {
+        return Err(anyhow!("Pool must contain WETH"));
+    };
+
+    Ok(PoolConfig {
+        name: String::new(),
+        address: pair_address,
+        router: router_address,
+        order,
+    })
 }
 
 // --- Main Entry ---
@@ -244,53 +286,43 @@ async fn run_bot(config: AppConfig) -> Result<()> {
         return Err(anyhow!(msg));
     }
 
-    // 2. Whitelist Setup, [name, pair address, router address]
-    let raw_whitelist = vec![
-        (
-            "BaseSwap",
-            "0xab067c01C7F5734da168C699Ae9d23a4512c9FdB",
-            "0x2948acbbc8795267e62a1220683a48e718b52585",
-        ),
-        (
-            "UniswapV2",
-            "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C",
-            "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
-        ),
-        (
-            "SushiSwap",
-            "0x2F8818D1B0f3e3E295440c1C0cDDf40aAA21fA87",
-            "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891",
-        ),
-        (
-            "AlienBase",
-            "0xB16D2257643fdBB32d12b9d73faB784eB4f1Bee4",
-            "0x8c1A3cF8f83074169FE5D7aD50B978e1cd6b37c7",
-        ),
-    ];
+    info!("Loading pools from pools.json...");
+
+    let config_content = fs::read_to_string("pools.json")
+        .map_err(|e| anyhow!("Failed to read pools.json: {}", e))?;
+
+    let json_configs: Vec<JsonPoolInput> = serde_json::from_str(&config_content)
+        .map_err(|e| anyhow!("Failed to parse pools.json: {}", e))?;
+
+    info!(
+        "Found {} entries in config file. Verifying on-chain...",
+        json_configs.len()
+    );
+
+    let mut pools = Vec::new();
+
+    for config in json_configs {
+        let pair_address = Address::from_str(&config.pair)?;
+        let router_address = Address::from_str(&config.router)?;
+
+        match verify_pool(client.clone(), pair_address, router_address).await {
+            Ok(mut pool) => {
+                pool.name = config.name; // Set the name from JSON
+                info!("Loaded Pool: {} ({:?})", pool.name, pool.address);
+                pools.push(pool);
+            }
+            Err(e) => {
+                error!("Failed to verify pool {}: {}", config.name, e);
+            }
+        }
+    }
+
+    if pools.is_empty() {
+        return Err(anyhow!("No valid pools loaded. Check pools.json"));
+    }
 
     let usdc = Address::from_str(USDC_ADDR)?;
     let weth = Address::from_str(WETH_ADDR)?;
-    let mut pools = Vec::new();
-
-    info!("Verifying Pools...");
-    for (name, pair, router) in raw_whitelist {
-        let pair_addr = Address::from_str(pair)?;
-        let contract = IUniswapV2Pair::new(pair_addr, client.clone());
-        let token0 = contract.token_0().call().await?;
-        let order = if token0 == usdc {
-            TokenOrder::UsdcFirst
-        } else if token0 == weth {
-            TokenOrder::WethFirst
-        } else {
-            continue;
-        };
-        pools.push(PoolConfig {
-            name: name.to_string(),
-            address: pair_addr,
-            router: Address::from_str(router)?,
-            order,
-        });
-    }
 
     // 3. Log Listener
     let reserves = Arc::new(DashMap::new()); // 并发哈希表（Concurrent HashMap）。
