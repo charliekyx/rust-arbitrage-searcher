@@ -1,3 +1,4 @@
+//
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
 use cocoon::Cocoon;
@@ -49,6 +50,7 @@ abigen!(
    IUniswapV2Pair, r#"[
         function token0() external view returns (address)
         function token1() external view returns (address)
+        function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)
     ]"#
 );
 
@@ -72,7 +74,7 @@ struct PoolConfig {
     address: Address,
     router: Address,
     order: TokenOrder,
-    token_other: Address, // [新增] 记录非 WETH 的那个代币地址
+    token_other: Address,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -97,7 +99,7 @@ struct GasState {
 }
 
 struct SharedGasManager {
-    accumulated_loss: Mutex<u128>, // Arc默认是不允许修改内部数据的, 保证同一时间只有一个人能修改这个数据
+    accumulated_loss: Mutex<u128>,
     file_path: String,
 }
 
@@ -119,9 +121,6 @@ impl SharedGasManager {
         if let Ok(json) = serde_json::to_string(&state) {
             let _ = fs::write(&self.file_path, json);
         }
-        // 锁的周期绑定在 guard 这个变量的生命周期上
-        // Rust 编译器会自动调用 guard 的 drop() 方法。
-        // 在 drop() 里面，Rust 会自动执行“解锁”操作。
     }
     fn get_loss(&self) -> u128 {
         *self.accumulated_loss.lock().unwrap()
@@ -157,8 +156,6 @@ impl NonceManager {
     }
 }
 
-// Helper function to verify pool and determine token order
-// This extracts the logic that was previously hardcoded inside the loop
 async fn verify_pool(
     client: Arc<SignerMiddleware<Arc<Provider<Ipc>>, LocalWallet>>,
     pair_address: Address,
@@ -170,11 +167,11 @@ async fn verify_pool(
 
     let weth = Address::from_str(WETH_ADDR)?;
 
-    // 识别 WETH 顺序，同时找出另一个代币是谁
+    // Identify WETH order and find the other token
     let (order, token_other) = if token0 == weth {
-        (TokenOrder::WethFirst, token1) // token0 是 WETH，那 token1 就是我们要的
+        (TokenOrder::WethFirst, token1)
     } else if token1 == weth {
-        (TokenOrder::UsdcFirst, token0) // token1 是 WETH，那 token0 就是我们要的
+        (TokenOrder::UsdcFirst, token0)
     } else {
         return Err(anyhow!("Pool must contain WETH"));
     };
@@ -184,22 +181,20 @@ async fn verify_pool(
         address: pair_address,
         router: router_address,
         order,
-        token_other, // [新增] 保存代币地址
+        token_other,
     })
 }
+
 // --- Main Entry ---
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-
-    // NOTE: dotenv() has been removed. We now strictly enforce encrypted config.
     info!("System Starting: Base L2 MEV Bot");
 
     // 1. Decrypt Configuration
     let config = load_encrypted_config()?;
 
-    // Send Startup Email using the decrypted config
     send_email(
         &config,
         "Bot Started",
@@ -224,13 +219,9 @@ async fn main() -> Result<()> {
 
 // --- Helper to load config ---
 fn load_encrypted_config() -> Result<AppConfig> {
-    // Try to get password from environment variable (for supervisor/docker)
-    // or prompt user if interactive.
     let password = match env::var("CONFIG_PASS") {
         Ok(p) => p,
         Err(_) => {
-            // If running in background, this will fail, which is intended security.
-            // For manual run:
             eprint!("Enter Config Password: ");
             std::io::stdout().flush()?;
             let mut input = String::new();
@@ -241,7 +232,7 @@ fn load_encrypted_config() -> Result<AppConfig> {
 
     let mut file =
         File::open("mev_bot.secure").context("Config file 'mev_bot.secure' not found")?;
-    // Cocoon 需要 mut 来更新内部状态
+    // Cocoon needs mut to update internal state
     let cocoon = Cocoon::new(password.as_bytes());
 
     let decrypted_bytes = cocoon
@@ -251,7 +242,6 @@ fn load_encrypted_config() -> Result<AppConfig> {
     let config: AppConfig = serde_json::from_slice(&decrypted_bytes)
         .map_err(|e| anyhow!("content parse error: {:?}", e))?;
 
-    // Security check: ensure sensitive fields are not empty
     if config.private_key.is_empty() || config.ipc_path.is_empty() {
         return Err(anyhow!("Decrypted config contains empty fields"));
     }
@@ -263,8 +253,8 @@ fn load_encrypted_config() -> Result<AppConfig> {
 // --- Bot Logic ---
 
 async fn run_bot(config: AppConfig) -> Result<()> {
-    // 1. Initialize using Config Object (NOT env vars)
-    // 多处需要这个链接，这里使用arc节省资源
+    // 1. Initialize
+    // Used in multiple places, using Arc to save resources
     let provider = Arc::new(Provider::<Ipc>::connect_ipc(&config.ipc_path).await?);
 
     let wallet = LocalWallet::from_str(&config.private_key)?.with_chain_id(8453u64);
@@ -274,7 +264,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     let contract_addr: Address = config.contract_address.parse()?;
     let executor = FlashLoanExecutor::new(contract_addr, client.clone());
 
-    // 跨任务存活(GasManager), 防止后台任务(spawn_tracker)比main后结束生命周期
+    // Cross-task survival (GasManager)
     let gas_manager = Arc::new(SharedGasManager::new("gas_state.json".to_string()));
     if gas_manager.get_loss() >= MAX_DAILY_GAS_LOSS_WEI {
         let msg = format!(
@@ -306,7 +296,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
         match verify_pool(client.clone(), pair_address, router_address).await {
             Ok(mut pool) => {
-                pool.name = config.name; // Set the name from JSON
+                pool.name = config.name;
                 info!("Loaded Pool: {} ({:?})", pool.name, pool.address);
                 pools.push(pool);
             }
@@ -323,71 +313,60 @@ async fn run_bot(config: AppConfig) -> Result<()> {
     let usdc = Address::from_str(USDC_ADDR)?;
     let weth = Address::from_str(WETH_ADDR)?;
 
-    // 3. Log Listener
-    let reserves = Arc::new(DashMap::new()); // 并发哈希表（Concurrent HashMap）。
-                                             //tokio::spawn 里的任务需要“拿走”一个变量的所有权，如果你把 reserves 直接给它，主线程手里就没东西可用了
-                                             // r_clone 在后台任务里写入的数据，reserves 在主线程里立马就能读到
-    let r_clone = reserves.clone();
-    let p_clone = provider.clone();
-    let filter = Filter::new()
-        .address(pools.iter().map(|p| p.address).collect::<Vec<_>>()) // 只关心被白名单的dex合约地址事件
-        .topic0(H256::from_str(
-            "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1",
-        )?); // 只关心Sync(uint112, uint112)事件， keccak256("Sync(uint112,uint112)")
+    // ==========================================
+    // 2. Data Initialization
+    // ==========================================
+    let reserves = Arc::new(DashMap::new());
 
-    tokio::spawn(async move {
-        let mut stream = p_clone.subscribe_logs(&filter).await.unwrap();
-        while let Some(log) = stream.next().await {
-            info!("👂 RX Log from: {:?}", log.address);
-            // 在以太坊虚拟机 (EVM) 的日志数据 (data) 中，所有数字通常都会被填充到 32 字节 (256位) 的长度
-            // Sync 事件的结构: Sync 事件有两个参数：reserve0 和 reserve1, 总共64字节
+    // --- [Step A] Initial Fetch: Warm up the cache ---
+    info!("Prefetching reserves for {} pools...", pools.len());
+    let mut success_count = 0;
+    let start_block = provider.get_block_number().await?.as_u64();
 
-            if log.data.len() == 64 {
-                if let Ok(d) = ethers::abi::decode(
-                    &[
-                        ethers::abi::ParamType::Uint(112), //池子中 Token0 的余额（例如 USDC 的数量）
-                        ethers::abi::ParamType::Uint(112), // 池子中 Token1 的余额（例如 weth 的数量）
-                    ],
-                    &log.data,
-                ) {
-                    let r0 = d[0].clone().into_uint().unwrap();
-                    let r1 = d[1].clone().into_uint().unwrap();
-                    r_clone.insert(log.address, (r0, r1, log.block_number.unwrap_or_default()));
-                }
+    for pool in &pools {
+        let pair = IUniswapV2Pair::new(pool.address, client.clone());
+        match pair.get_reserves().call().await {
+            Ok((r0, r1, _)) => {
+                reserves.insert(pool.address, (U256::from(r0), U256::from(r1), start_block));
+                success_count += 1;
             }
+            Err(_) => { /* Ignore initial errors */ }
         }
-    });
+    }
+    info!(
+        "Reserves initialized: {}/{} pools ready.",
+        success_count,
+        pools.len()
+    );
+
+    // ==========================================
+    // 3. Main Arbitrage Loop & Polling
+    // ==========================================
+    // We removed the tokio::spawn to fix the lifetime (E0597) issue.
+    // Instead, we fetch logs INSIDE the main loop directly.
 
     let nonce_manager = Arc::new(NonceManager::new(provider.clone(), my_addr).await?);
-    let mut stream = client.subscribe_blocks().await?;
 
-    info!("Bot Running...");
+    // Subscribe to new blocks
+    let mut stream = client.subscribe_blocks().await?;
+    let sync_event_signature =
+        H256::from_str("0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1")?;
+
+    info!("Bot Running... Waiting for blocks...");
 
     loop {
+        // Wait for the next block
         let block = match tokio::time::timeout(Duration::from_secs(15), stream.next()).await {
-            Ok(Some(b)) => b,                                          // 情况1: 正常收到区块
-            Ok(None) => return Err(anyhow!("WebSocket Stream Ended")), // 情况2: 连接被服务器关闭
+            Ok(Some(b)) => b,
+            Ok(None) => return Err(anyhow!("WebSocket Stream Ended")),
             Err(_) => {
-                // 情况3: 超时了 (心跳丢失)
                 let msg = "Heartbeat Lost: No blocks for 15s";
                 send_email(&config, "Heartbeat Lost", msg).await;
                 return Err(anyhow!(msg));
             }
         };
 
-        let current_bn = block.number.unwrap();
-
-        // ============ hearbeat 检测，后续删除 =================
-        // if current_bn.as_u64() % 15 == 0 {
-        //     info!(
-        //         "Heartbeat: Alive at Block {} | Monitoring {} pools | Gas: {} gwei",
-        //         current_bn,
-        //         pools.len(),
-        //         // 简单的 Gas 估算展示 (Option 处理)
-        //         format_ether(block.base_fee_per_gas.unwrap_or_default() * 1_000_000_000) // 简易转换显示，或者直接不显示Gas也行
-        //     );
-        // }
-        // =====================================================
+        let current_bn = block.number.unwrap(); // This is ethers::types::U64
 
         if gas_manager.get_loss() >= MAX_DAILY_GAS_LOSS_WEI {
             let msg = format!(
@@ -398,6 +377,30 @@ async fn run_bot(config: AppConfig) -> Result<()> {
             return Err(anyhow!(msg));
         }
 
+        // --- PART 1: Pull Logs & Update Reserves ---
+        // Fetch logs for the current block immediately
+        let filter = Filter::new()
+            .from_block(current_bn)
+            .to_block(current_bn)
+            .topic0(sync_event_signature);
+
+        if let Ok(logs) = client.get_logs(&filter).await {
+            for log in logs {
+                if reserves.contains_key(&log.address) {
+                    // Optional: Debug log
+                    info!("Log Found in Block {}: {:?}", current_bn, log.address);
+
+                    if log.data.len() >= 64 {
+                        let r0 = U256::from_big_endian(&log.data[0..32]);
+                        let r1 = U256::from_big_endian(&log.data[32..64]);
+                        // Update DashMap
+                        reserves.insert(log.address, (r0, r1, current_bn.as_u64()));
+                    }
+                }
+            }
+        }
+
+        // --- PART 2: Arbitrage Calculation ---
         for i in 0..pools.len() {
             for j in 0..pools.len() {
                 if i == j {
@@ -405,50 +408,36 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                 }
                 let (pa, pb) = (&pools[i], &pools[j]);
 
-                // ============ 核心修复：代币匹配检查 ============
-                // 如果池子 A 卖的是 DEGEN，池子 B 收的是 USDC，这就不能套利！
-                // 必须确保两个池子交易的是同一种“非 WETH”代币。
+                // Token matching check
                 if pa.token_other != pb.token_other {
                     continue;
                 }
 
                 if let (Some(da), Some(db)) = (reserves.get(&pa.address), reserves.get(&pb.address))
                 {
-                    // 套利策略：先用 WETH 买 USDC (Pool A)，再用 USDC 买回 WETH (Pool B)
-
                     let (ra0, ra1, bn_a) = *da;
                     let (rb0, rb1, bn_b) = *db;
 
-                    // 垃圾池过滤：如果池子里的 WETH 少于 0.1 ETH，直接跳过
-                    // WETH 精度是 18，0.1 ETH = 10^17 Wei
-                    // 定义最小流动性阈值 (0.1 WETH)
                     let min_liq = U256::from(100_000_000_000_000_000u128);
 
-                    // 精准定位 Pool A 的 WETH 余额
                     let weth_a = if pa.order == TokenOrder::WethFirst {
                         ra0
                     } else {
                         ra1
                     };
-                    // 精准定位 Pool B 的 WETH 余额
                     let weth_b = if pb.order == TokenOrder::WethFirst {
                         rb0
                     } else {
                         rb1
                     };
 
-                    // 只要任意一个池子的 WETH 余额不足 0.1，直接跳过
                     if weth_a < min_liq || weth_b < min_liq {
-                        // 可选：打印一下被过滤的垃圾池，方便确认
-                        // info!(
-                        //     "Filtering dust pool: {} (WETH: {})",
-                        //     pa.name,
-                        //     format_ether(weth_a)
-                        // );
                         continue;
                     }
 
-                    if current_bn > bn_a + 3 || current_bn > bn_b + 3 {
+                    // Stale data check: Ensure logs are recent
+                    // Fix: Convert current_bn (U64) to u64 for comparison
+                    if current_bn.as_u64() > bn_a + 3 || current_bn.as_u64() > bn_b + 3 {
                         continue;
                     }
 
@@ -464,7 +453,6 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                         (rb1, rb0)
                     };
 
-                    // Ternary Search
                     let (opt_amt, profit_wei) =
                         ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
 
@@ -473,18 +461,14 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                     }
                     let profit_u256 = U256::try_from(profit_wei).unwrap_or_default();
 
-                    // 1. 估算 Gas 成本
-                    // 闪电贷交易通常消耗 200,000 - 350,000 Gas。为了安全，我们按 350,000 估算。
+                    // Cost estimation
                     let estimated_gas_limit = U256::from(350_000);
                     let (base_fee, priority_fee) = estimate_eip1559_fees(&provider).await?;
                     let gas_price = base_fee + priority_fee;
                     let estimated_gas_cost_wei = gas_price * estimated_gas_limit;
 
-                    // 2. 设定你的“净利润”目标 (你真正想装进口袋的钱)
-                    // 比如赚 0.00005 ETH (约 $0.15) 就愿意跑
+                    // Target profit
                     let min_net_profit = parse_ether("0.00005")?;
-
-                    // 3. 动态计算这就交易需要的“毛利润”阈值
                     let dynamic_threshold = estimated_gas_cost_wei + min_net_profit;
 
                     if profit_u256 > dynamic_threshold {
@@ -493,13 +477,13 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
                         info!(
                             "Opp found [{} -> {}]! Profit: {} ETH, Gas Cost: {} ETH. Action: GO",
-                            pa.name, // 买入池
-                            pb.name, // 卖出池
+                            pa.name,
+                            pb.name,
                             format_ether(profit_u256),
                             format_ether(estimated_gas_cost_wei)
                         );
 
-                        // Slippage Protection
+                        // Execute Transaction
                         let path_a = vec![weth, usdc];
                         let path_b = vec![usdc, weth];
 
@@ -540,6 +524,7 @@ async fn run_bot(config: AppConfig) -> Result<()> {
                             contract_min_profit,
                         );
 
+                        // Simulate execution, continue if failed
                         if tx_call.call().await.is_err() {
                             continue;
                         }
@@ -634,7 +619,7 @@ fn spawn_tracker(
                 .await;
             } else {
                 record.status = "Success".to_string();
-                record.realized_profit = Some(format_ether(exp)); // Simplified
+                record.realized_profit = Some(format_ether(exp));
                 send_email(
                     &config,
                     "Success",
@@ -670,8 +655,6 @@ async fn send_email(config: &AppConfig, subject: &str, body: &str) {
 }
 
 // --- Math & Logging ---
-// 套利利润曲线是一个倒 U 型抛物线，所以必须用三分法找极值点
-
 fn ternary_search_optimal_amount(
     ra_in: U256,
     ra_out: U256,
@@ -747,237 +730,8 @@ async fn estimate_eip1559_fees(provider: &Provider<Ipc>) -> Result<(U256, U256)>
         .await?
         .ok_or_else(|| anyhow!("No block"))?;
 
-    // Base 链的基础费
     let base_fee = block.base_fee_per_gas.unwrap_or(U256::from(100_000_000));
-
-    // 动态调整优先费：如果是在抢机会，给高一点，比如 0.15 - 0.5 gwei
-    // 这里简单给一个比地板价稍高的值，确保快速打包
     let priority_fee = parse_units("0.15", "gwei")?.into();
 
     Ok((base_fee, priority_fee))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ethers::utils::parse_ether;
-
-    fn to_u256(n: &str) -> U256 {
-        parse_ether(n).unwrap()
-    }
-
-    #[test]
-    fn test_simulate_profit_profitable() {
-        // 借入 ETH。
-        // Pool A (第一站): 价格要高 (贵)，要在这里卖 ETH。
-        // Pool A: 100 ETH, 110,000 USDC (价格 1100)
-        let ra_in = to_u256("100"); // ETH Reserve
-        let ra_out = to_u256("110000"); // USDC Reserve
-
-        // Pool B (第二站): 价格要低 (便宜)，我们要在这里买回 ETH。
-        // Pool B: 100 ETH, 100,000 USDC (价格 1000)
-        let rb_in = to_u256("100000"); // USDC Reserve (调低，变便宜)
-        let rb_out = to_u256("100"); // ETH Reserve
-
-        // 投入 1 ETH
-        let amount_in = to_u256("1");
-
-        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
-
-        // 预期逻辑：1 ETH 在 A 换成 ~1100 USDC，去 B 换回 ~1.1 ETH，利润 ~0.1 ETH
-        println!("Profit for 1 ETH input: {:?}", profit);
-        assert!(
-            profit > I256::zero(),
-            "Profit should be positive, but got {:?}",
-            profit
-        );
-    }
-
-    #[test]
-    fn test_ternary_search_optimality() {
-        // Pool A (高价卖出): 价格 2000
-        let ra_in = to_u256("100");
-        let ra_out = to_u256("200000");
-
-        // Pool B (低价买入): 价格 1000
-        let rb_in = to_u256("100000");
-        let rb_out = to_u256("100");
-
-        // 寻找最佳投入金额
-        let (best_amt, max_profit) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
-
-        println!("Best Amount: {:?}, Max Profit: {:?}", best_amt, max_profit);
-
-        // 断言：必须找到正收益
-        assert!(best_amt > U256::zero());
-        assert!(max_profit > I256::zero());
-
-        // 验证“山顶”逻辑：
-        // 比最佳金额少投一点点，或者多投一点点，利润都应该变少
-        let one_wei = U256::one();
-        let profit_at_best = simulate_profit(best_amt, ra_in, ra_out, rb_in, rb_out);
-
-        // 如果 best_amt 很大，测试 -1 wei 和 +1 wei
-        if best_amt > one_wei {
-            let profit_at_less = simulate_profit(best_amt - one_wei, ra_in, ra_out, rb_in, rb_out);
-            assert!(
-                profit_at_best >= profit_at_less,
-                "Peak check failed: best < less"
-            );
-        }
-
-        let profit_at_more = simulate_profit(best_amt + one_wei, ra_in, ra_out, rb_in, rb_out);
-        assert!(
-            profit_at_best >= profit_at_more,
-            "Peak check failed: best < more"
-        );
-    }
-
-    #[test]
-    fn test_unprofitable_scenario() {
-        // --- 亏损场景设置 ---
-        // Pool A (卖出站): 价格很低，贱卖。
-        // 100 ETH : 100,000 USDC -> 价格 1000 USDC/ETH
-        let ra_in = to_u256("100");
-        let ra_out = to_u256("100000");
-
-        // Pool B (买回站): 价格很高，贵买。
-        // 100 ETH : 110,000 USDC -> 价格 1100 USDC/ETH
-        let rb_in = to_u256("110000");
-        let rb_out = to_u256("100");
-
-        // 1. 测试单笔计算：投入 1 ETH 会发生什么？
-        let amount_in = to_u256("1");
-        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
-
-        println!("Loss for 1 ETH input: {:?}", profit);
-
-        // 断言：利润必须是负数 (I256 < 0)
-        assert!(
-            profit < I256::zero(),
-            "Should be losing money but got positive profit!"
-        );
-
-        // 2. 测试搜索算法：在这种情况下，机器人应该建议我们投多少钱？
-        // 既然怎么投都亏，最优策略应该是“不投” (0 ETH)。
-        let (best_amt, max_profit) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
-
-        println!(
-            "Best Amount in bad market: {:?}, Profit: {:?}",
-            best_amt, max_profit
-        );
-
-        // 断言：最优投入金额应该是 0 (或者非常接近 0)，利润应该是 0 (不亏就是赚)
-        assert!(
-            max_profit <= I256::zero(),
-            "Safety Check Failed: Bot thinks it can make money!"
-        );
-        let dust_threshold = to_u256("0.000001"); // 允许 0.000001 ETH 的误差
-        assert!(
-            best_amt < dust_threshold,
-            "Bot suggested risking too much money!"
-        );
-    }
-
-    #[test]
-    fn test_ternary_search_convergence() {
-        let ra_in = to_u256("100");
-        let ra_out = to_u256("200000");
-        let rb_in = to_u256("100000");
-        let rb_out = to_u256("100");
-
-        // 运行两次搜索，验证结果是否一致
-        let (amt1, profit1) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
-        let (amt2, profit2) = ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
-
-        assert_eq!(amt1, amt2, "Search results should be deterministic");
-        assert_eq!(profit1, profit2, "Profit should be deterministic");
-
-        // 验证精度（搜索范围应该收敛到 < 0.001 ETH）
-        let precision = to_u256("0.001");
-        let profit_at_plus = simulate_profit(amt1 + precision, ra_in, ra_out, rb_in, rb_out);
-        let profit_at_minus = simulate_profit(amt1 - precision, ra_in, ra_out, rb_in, rb_out);
-
-        let tolerance = profit1.abs() / 100; // 1% 误差
-        assert!(
-            (profit1 - profit_at_plus).abs() <= tolerance,
-            "Search precision insufficient"
-        );
-        assert!(
-            (profit1 - profit_at_minus).abs() <= tolerance,
-            "Search precision insufficient"
-        );
-    }
-    #[test]
-    fn test_uniswap_fee_calculation() {
-        // 简化场景：1:1 价格，无价格冲击
-        let reserve_in = to_u256("1000000"); // 1M ETH
-        let reserve_out = to_u256("1000000"); // 1M USDC
-        let amount_in = to_u256("1"); // 1 ETH
-
-        let amount_out = get_amount_out_local(amount_in, reserve_in, reserve_out);
-
-        // 预期输出 = 1 * 0.997 = 0.997 ETH（扣除 0.3% 手续费）
-        let expected = to_u256("0.997");
-
-        println!("Amount Out: {:?}", amount_out);
-        println!("Expected: {:?}", expected);
-
-        // 允许 0.1% 的误差
-        let diff = if amount_out > expected {
-            amount_out - expected
-        } else {
-            expected - amount_out
-        };
-        assert!(diff < to_u256("0.001"), "Fee calculation error");
-    }
-
-    #[test]
-    fn test_excessive_input() {
-        let ra_in = to_u256("100");
-        let ra_out = to_u256("110000");
-        let rb_in = to_u256("100000");
-        let rb_out = to_u256("100");
-
-        // 投入 1000 ETH（远超储备量）
-        let amount_in = to_u256("1000");
-        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
-
-        // 预期：利润为负（因为价格冲击太大）
-        println!("Profit for excessive input: {:?}", profit);
-        assert!(
-            profit < I256::zero(),
-            "Should lose money due to high slippage"
-        );
-    }
-    #[test]
-    fn test_zero_input() {
-        let ra_in = to_u256("100");
-        let ra_out = to_u256("110000");
-        let rb_in = to_u256("100000");
-        let rb_out = to_u256("100");
-
-        let amount_in = U256::zero();
-        let profit = simulate_profit(amount_in, ra_in, ra_out, rb_in, rb_out);
-
-        assert_eq!(profit, I256::zero());
-    }
-    #[test]
-    fn fuzz_test_ternary_search() {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-
-        for _ in 0..1000 {
-            let ra_in = U256::from(rng.gen_range(1..1_000_000));
-            let ra_out = U256::from(rng.gen_range(1..1_000_000));
-            let rb_in = U256::from(rng.gen_range(1..1_000_000));
-            let rb_out = U256::from(rng.gen_range(1..1_000_000));
-
-            let (best_amt, max_profit) =
-                ternary_search_optimal_amount(ra_in, ra_out, rb_in, rb_out);
-
-            // 验证不会 panic
-            assert!(best_amt >= U256::zero());
-        }
-    }
 }
