@@ -414,14 +414,30 @@ async fn run_bot(config: AppConfig) -> Result<()> {
 
                     // 垃圾池过滤：如果池子里的 WETH 少于 0.1 ETH，直接跳过
                     // WETH 精度是 18，0.1 ETH = 10^17 Wei
-                    let min_liquidity = U256::from(100_000_000_000_000_000u128);
+                    // 定义最小流动性阈值 (0.1 WETH)
+                    let min_liq = U256::from(100_000_000_000_000_000u128);
 
-                    // 简单的判断：只要 reserve 里较小的那个数太小，可能就是垃圾池
-                    // (更严谨的做法是判断哪一个是 WETH，然后检查 WETH 的余额)
-                    if ra0 < min_liquidity && ra1 < min_liquidity {
-                        continue;
-                    }
-                    if rb0 < min_liquidity && rb1 < min_liquidity {
+                    // 精准定位 Pool A 的 WETH 余额
+                    let weth_a = if pa.order == TokenOrder::WethFirst {
+                        ra0
+                    } else {
+                        ra1
+                    };
+                    // 精准定位 Pool B 的 WETH 余额
+                    let weth_b = if pb.order == TokenOrder::WethFirst {
+                        rb0
+                    } else {
+                        rb1
+                    };
+
+                    // 只要任意一个池子的 WETH 余额不足 0.1，直接跳过
+                    if weth_a < min_liq || weth_b < min_liq {
+                        // 可选：打印一下被过滤的垃圾池，方便确认
+                        info!(
+                            // "Filtering dust pool: {} (WETH: {})",
+                            pa.name,
+                            format_ether(weth_a)
+                        );
                         continue;
                     }
 
